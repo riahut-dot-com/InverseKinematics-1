@@ -37,8 +37,10 @@ void DrawAxis();
 void initializeArms();
 
 Affine3f getModelview();
-Vector4f computeE();
-Vector4f ComputeJacobian(ArmPart a1, ArmPart a2, ArmPart a3, Vector4f E);
+Vector4f hmg(Vector3f v);
+Vector3f invHmg(Vector4f v);
+//Vector4f computeE();
+Matrix3f ComputeJacobian(ArmPart a1, ArmPart a2, ArmPart a3, Vector4f E);
 
 Affine3f view;
 Affine3f model;
@@ -79,7 +81,7 @@ void initializeArms(){
     // arm3 initialization
     arm3.joint << 0,0,0,1;
     arm3.jointNormal << 0,0,1;
-    arm3.jointRotation = -30;
+    arm3.jointRotation = -45;
     
     arm3.v1 << 0,-0.35,0;
     arm3.v2 << 5,-0.35,0;
@@ -94,38 +96,37 @@ void Animation_render(){
     model = Affine3f::Identity();
     glLoadIdentity();
  
-    model.rotate(AngleAxisf(arm1.jointRotation, arm1.jointNormal));
-        //glRotatef(arm1.jointRotation, arm1.jointNormal[0], arm1.jointNormal[1], arm1.jointNormal[2]); 
-    
+    model.rotate(AngleAxisf(arm1.jointRotation, arm1.jointNormal));    
     arm1.jointWorld = model*arm1.joint;
     DrawArm1(view*model);    
     
     model.translate(arm1.slot);
     model.rotate(AngleAxisf(arm2.jointRotation, arm2.jointNormal));
+    arm2.jointWorld = model*arm2.joint;
     DrawArm2(view*model);
     
     
     model.translate(arm2.slot);
     model.rotate(AngleAxisf(arm3.jointRotation, arm3.jointNormal));
+    arm3.jointWorld = model*arm3.joint;
     DrawArm3(view*model);
     
-    // compute E vector and transform to globa coordinates 
-    //Vector4f Eh = computeE();
-    //Eh = m*Eh;
-    //std::cout << Eh << std::endl;
-    //ComputeJacobian(arm1,arm2,arm3,Eh);
+    // compute E vector in world coordiantes
+    Vector4f E = model*hmg(arm3.slot); 
+    
+    Matrix3f j = ComputeJacobian(arm1,arm2,arm3,E);
     
     glMultMatrixf(view.data());
         
     DrawG();
-    DrawAxis();
+    DrawAxis();   
+   
     
-    //glLoadIdentity();
-//    glColor3f(0,1,0);
-//    glBegin(GL_POINTS);
-//    glVertex3fv(Eh.data());
-//    glEnd();
-    
+    glColor3f(0,1,0);
+    glBegin(GL_POINTS);
+    glVertex3fv(E.data());
+    glEnd();
+    /*
     glColor3f(1,0,1);
     glBegin(GL_POINTS);
     glVertex3fv(arm1.jointWorld.data());
@@ -140,7 +141,7 @@ void Animation_render(){
     glBegin(GL_POINTS);
     glVertex3fv(arm3.jointWorld.data());
     glEnd();
-    
+    */
 
 }
 
@@ -152,6 +153,7 @@ void Animation_init(){
     delta = 0.1;
 
 }
+
 
 void Animation_update(){
 
@@ -176,31 +178,33 @@ Affine3f getModelview(){
     return Affine3f(Matrix4f(m));
 }
 
-Vector4f computeE(){
-    Vector4f e; e << arm3.slot,1;
-    return e;    
+/* transform vector to homogenous space*/
+Vector4f hmg(Vector3f v){
+    Vector4f b;
+    b << v,1;
+    return b;
 }
 
-float computeTheta(ArmPart p){
-    //Vector3f axisX << 0,0,1;
-    //p.slot - p.joint;
+Vector3f invHmg(Vector4f v){
+    Vector3f a(v.data());
+    return a;
+    //return v;
 }
 
-Vector4f ComputeJacobian(ArmPart a1, ArmPart a2, ArmPart a3, Vector4f _E){
+Matrix3f ComputeJacobian(ArmPart a1, ArmPart a2, ArmPart a3, Vector4f _E){
     Matrix3f j;
     Vector3f E, jn1,jn2,jn3,jn4;
     Vector3f p1,p2,p3;
     
-    E << _E(0), _E(1), _E(2);
+    E = invHmg(_E);
     
-    jn1 << a1.jointNormal(0), a1.jointNormal(1), a1.jointNormal(2);
-    jn2 << a2.jointNormal(0), a2.jointNormal(1), a2.jointNormal(2);
-    jn3 << a3.jointNormal(0), a3.jointNormal(1), a3.jointNormal(2);
+    jn1 = a1.jointNormal;
+    jn2 = a2.jointNormal;
+    jn3 = a3.jointNormal;
     
-    //std::cout << a1.jointWorld << std::endl;
-    p1 << a1.jointWorld(0), a1.jointWorld(1), a1.jointWorld(2);
-    p2 << a2.jointWorld(0), a2.jointWorld(1), a2.jointWorld(2) ;
-    p3 << a3.jointWorld(0), a3.jointWorld(1), a3.jointWorld(2);
+    p1 << invHmg(a1.jointWorld);
+    p2 << invHmg(a2.jointWorld);
+    p3 << invHmg(a3.jointWorld);
     
     //Vector4f a1 = 
     j.col(0) << jn1.cross(E-p1);
